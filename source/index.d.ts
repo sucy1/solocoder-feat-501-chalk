@@ -122,6 +122,22 @@ export interface ChalkInstance {
 	bgAnsi256: (index: number) => this;
 
 	/**
+	Use gradient colors to set text color. The colors transition smoothly from left to right within each line.
+
+	@param colors - Two or more colors in hex format (`#ff0000`) or CSS color names (`red`).
+	@returns A chalk instance that applies the gradient to the text.
+
+	@example
+	```
+	import chalk from 'chalk';
+
+	chalk.gradient('#ff0000', '#00ff00')('Hello World');
+	chalk.gradient('red', 'green', 'blue')('Multi-color gradient');
+	```
+	*/
+	gradient: (...colors: string[]) => this;
+
+	/**
 	Modifier: Reset the current style.
 	*/
 	readonly reset: this;
@@ -321,5 +337,39 @@ export const backgroundColors: readonly BackgroundColor[];
 Basic color names. The combination of foreground and background color names.
 */
 export const colors: readonly Color[];
+
+/**
+Convert a hexadecimal color string to an RGB array.
+
+@param hex - The hexadecimal color string (e.g., `#ff0000` or `#f00`).
+@returns An array of three numbers representing red, green, and blue values (0-255).
+
+@example
+```
+import {hexToRgb} from 'chalk';
+
+hexToRgb('#ff0000');
+//=> [255, 0, 0]
+```
+*/
+export function hexToRgb(hex: string): [number, number, number];
+
+/**
+Convert RGB values to a hexadecimal color string.
+
+@param red - The red value (0-255).
+@param green - The green value (0-255).
+@param blue - The blue value (0-255).
+@returns The hexadecimal color string (e.g., `#ff0000`).
+
+@example
+```
+import {rgbToHex} from 'chalk';
+
+rgbToHex(255, 0, 0);
+//=> '#ff0000'
+```
+*/
+export function rgbToHex(red: number, green: number, blue: number): string;
 
 export default chalk;

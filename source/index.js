@@ -3,6 +3,7 @@ import supportsColor from '#supports-color';
 import { // eslint-disable-line import/order
 	stringReplaceAll,
 	stringEncaseCRLFWithFirstIndex,
+	colorToRgb,
 } from './utilities.js';
 
 const {stdout: stdoutColor, stderr: stderrColor} = supportsColor;
@@ -116,6 +117,134 @@ for (const model of usedModels) {
 	};
 }
 
+const interpolateRgb = (color1, color2, factor) => [
+	color1[0] + ((color2[0] - color1[0]) * factor),
+	color1[1] + ((color2[1] - color1[1]) * factor),
+	color1[2] + ((color2[2] - color1[2]) * factor),
+];
+
+const getGradientColor = (colors, position) => {
+	if (colors.length === 1) {
+		return colors[0];
+	}
+
+	if (position <= 0) {
+		return colors[0];
+	}
+
+	if (position >= 1) {
+		return colors.at(-1);
+	}
+
+	const segmentCount = colors.length - 1;
+	const segmentPosition = position * segmentCount;
+	const segmentIndex = Math.floor(segmentPosition);
+	const segmentFraction = segmentPosition - segmentIndex;
+
+	return interpolateRgb(colors[segmentIndex], colors[segmentIndex + 1], segmentFraction);
+};
+
+const getRgbAnsi = (level, type, rgb) => {
+	const modelLevel = levelMapping[level];
+	if (modelLevel === 'ansi16m') {
+		return ansiStyles[type].ansi16m(...rgb);
+	}
+
+	if (modelLevel === 'ansi256') {
+		return ansiStyles[type].ansi256(ansiStyles.rgbToAnsi256(...rgb));
+	}
+
+	return ansiStyles[type].ansi(ansiStyles.rgbToAnsi(...rgb));
+};
+
+styles.gradient = {
+	get() {
+		const {level} = this;
+		const parentStyler = this[STYLER];
+		return function (...colors) {
+			if (colors.length < 2) {
+				throw new Error('Gradient requires at least two colors');
+			}
+
+			const rgbColors = colors.map(color => colorToRgb(color));
+			const closeCode = ansiStyles.color.close;
+
+			const applyGradient = string => {
+				if (level <= 0 || !string) {
+					return parentStyler ? parentStyler.openAll + string + parentStyler.closeAll : string;
+				}
+
+				const lines = string.split('\n');
+				const result = lines.map(line => {
+					if (line.length === 0) {
+						return line;
+					}
+
+					if (level <= 1) {
+						const startColor = rgbColors[0];
+						const endColor = rgbColors.at(-1);
+						const midColor = interpolateRgb(startColor, endColor, 0.5);
+						const openCode = getRgbAnsi(level, 'color', midColor.map(value => Math.round(value)));
+						return openCode + line + closeCode;
+					}
+
+					let resultLine = '';
+					let lastColor = null;
+
+					for (let i = 0; i < line.length; i++) {
+						const position = line.length === 1 ? 0 : i / (line.length - 1);
+						const color = getGradientColor(rgbColors, position).map(value => Math.round(value));
+
+						if (!lastColor || color[0] !== lastColor[0] || color[1] !== lastColor[1] || color[2] !== lastColor[2]) {
+							resultLine += getRgbAnsi(level, 'color', color);
+							lastColor = color;
+						}
+
+						resultLine += line[i];
+					}
+
+					resultLine += closeCode;
+					return resultLine;
+				});
+
+				let gradientResult = result.join('\n');
+
+				if (parentStyler) {
+					const {openAll, closeAll} = parentStyler;
+					if (gradientResult.includes('\u001B')) {
+						let styler = parentStyler;
+						while (styler !== undefined) {
+							gradientResult = stringReplaceAll(gradientResult, styler.close, styler.open);
+							styler = styler.parent;
+						}
+					}
+
+					const lfIndex = gradientResult.indexOf('\n');
+					if (lfIndex !== -1) {
+						gradientResult = stringEncaseCRLFWithFirstIndex(gradientResult, closeAll, openAll, lfIndex);
+					}
+
+					gradientResult = openAll + gradientResult + closeAll;
+				}
+
+				return gradientResult;
+			};
+
+			const builder = (...arguments_) => {
+				const string = (arguments_.length === 1) ? String(arguments_[0]) : arguments_.join(' ');
+				return applyGradient(string);
+			};
+
+			Object.setPrototypeOf(builder, proto);
+			builder[GENERATOR] = this;
+			builder[STYLER] = parentStyler;
+			builder[IS_EMPTY] = this[IS_EMPTY];
+
+			return builder;
+		};
+	},
+};
+
 const proto = Object.defineProperties(() => {}, {
 	...styles,
 	level: {
@@ -221,5 +350,7 @@ export {
 	stdoutColor as supportsColor,
 	stderrColor as supportsColorStderr,
 };
+
+export {hexToRgb, rgbToHex} from './utilities.js';
 
 export default chalk;

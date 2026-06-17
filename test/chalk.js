@@ -1,6 +1,11 @@
 import process from 'node:process';
 import test from 'ava';
-import chalk, {Chalk, chalkStderr} from '../source/index.js';
+import chalk, {
+	Chalk,
+	chalkStderr,
+	hexToRgb,
+	rgbToHex,
+} from '../source/index.js';
 
 chalk.level = 3;
 chalkStderr.level = 3;
@@ -123,4 +128,125 @@ test('keeps function prototype methods', t => {
 	t.is(chalk.apply(chalk, ['foo']), 'foo');
 	t.is(chalk.bind(chalk, 'foo')(), 'foo');
 	t.is(chalk.call(chalk, 'foo'), 'foo');
+});
+
+test('hexToRgb converts hex to RGB array', t => {
+	t.deepEqual(hexToRgb('#ff0000'), [255, 0, 0]);
+	t.deepEqual(hexToRgb('#00ff00'), [0, 255, 0]);
+	t.deepEqual(hexToRgb('#0000ff'), [0, 0, 255]);
+	t.deepEqual(hexToRgb('#ffffff'), [255, 255, 255]);
+	t.deepEqual(hexToRgb('#000000'), [0, 0, 0]);
+});
+
+test('hexToRgb supports shorthand hex', t => {
+	t.deepEqual(hexToRgb('#f00'), [255, 0, 0]);
+	t.deepEqual(hexToRgb('#0f0'), [0, 255, 0]);
+	t.deepEqual(hexToRgb('#00f'), [0, 0, 255]);
+	t.deepEqual(hexToRgb('#fff'), [255, 255, 255]);
+});
+
+test('hexToRgb handles invalid input', t => {
+	t.deepEqual(hexToRgb('invalid'), [0, 0, 0]);
+	t.deepEqual(hexToRgb(''), [0, 0, 0]);
+});
+
+test('rgbToHex converts RGB to hex string', t => {
+	t.is(rgbToHex(255, 0, 0), '#ff0000');
+	t.is(rgbToHex(0, 255, 0), '#00ff00');
+	t.is(rgbToHex(0, 0, 255), '#0000ff');
+	t.is(rgbToHex(255, 255, 255), '#ffffff');
+	t.is(rgbToHex(0, 0, 0), '#000000');
+});
+
+test('rgbToHex handles out of range values', t => {
+	t.is(rgbToHex(300, -10, 128), '#ff0080');
+	t.is(rgbToHex(256, 256, 256), '#ffffff');
+});
+
+test('rgbToHex handles floating point values', t => {
+	t.is(rgbToHex(255.5, 0.4, 127.6), '#ff0080');
+});
+
+test('gradient applies two-color gradient with hex', t => {
+	const result = chalk.gradient('#ff0000', '#0000ff')('AB');
+	t.true(result.startsWith('\u001B[38;2;255;0;0m'));
+	t.true(result.includes('\u001B[38;2;0;0;255m'));
+	t.true(result.endsWith('\u001B[39m'));
+	t.true(result.includes('A'));
+	t.true(result.includes('B'));
+});
+
+test('gradient applies two-color gradient with CSS color names', t => {
+	const result = chalk.gradient('red', 'blue')('AB');
+	t.true(result.startsWith('\u001B[38;2;255;0;0m'));
+	t.true(result.includes('\u001B[38;2;0;0;255m'));
+	t.true(result.endsWith('\u001B[39m'));
+});
+
+test('gradient supports multiple colors', t => {
+	const result = chalk.gradient('red', 'green', 'blue')('ABC');
+	t.true(result.startsWith('\u001B[38;2;255;0;0m'));
+	t.true(result.includes('\u001B[38;2;0;128;0m'));
+	t.true(result.includes('\u001B[38;2;0;0;255m'));
+	t.true(result.endsWith('\u001B[39m'));
+});
+
+test('gradient handles multi-line text with independent gradients per line', t => {
+	const result = chalk.gradient('#ff0000', '#0000ff')('AB\nCD');
+	const lines = result.split('\n');
+	t.is(lines.length, 2);
+	t.true(lines[0].startsWith('\u001B[38;2;255;0;0m'));
+	t.true(lines[0].endsWith('\u001B[39m'));
+	t.true(lines[1].startsWith('\u001B[38;2;255;0;0m'));
+	t.true(lines[1].endsWith('\u001B[39m'));
+});
+
+test('gradient throws error with less than two colors', t => {
+	t.throws(() => chalk.gradient('#ff0000')('test'), {message: 'Gradient requires at least two colors'});
+	t.throws(() => chalk.gradient()('test'), {message: 'Gradient requires at least two colors'});
+});
+
+test('gradient degrades gracefully at level 2 (256 colors)', t => {
+	const chalk256 = new Chalk({level: 2});
+	const result = chalk256.gradient('#ff0000', '#0000ff')('AB');
+	t.true(result.startsWith('\u001B[38;5;196m'));
+	t.true(result.includes('\u001B[38;5;21m'));
+	t.true(result.endsWith('\u001B[39m'));
+});
+
+test('gradient degrades to midpoint solid color at level 1 (16 colors)', t => {
+	const chalk16 = new Chalk({level: 1});
+	const result = chalk16.gradient('#ff0000', '#0000ff')('AB');
+	t.true(result.startsWith('\u001B[35m'));
+	t.true(result.endsWith('\u001B[39m'));
+	t.is(result, '\u001B[35mAB\u001B[39m');
+});
+
+test('gradient returns plain text at level 0 (no color)', t => {
+	const chalk0 = new Chalk({level: 0});
+	const result = chalk0.gradient('#ff0000', '#0000ff')('AB');
+	t.is(result, 'AB');
+});
+
+test('gradient handles empty string', t => {
+	t.is(chalk.gradient('#ff0000', '#0000ff')(''), '');
+});
+
+test('gradient handles single character', t => {
+	const result = chalk.gradient('#ff0000', '#0000ff')('A');
+	t.true(result.startsWith('\u001B[38;2;255;0;0m'));
+	t.true(result.endsWith('A\u001B[39m'));
+});
+
+test('gradient supports mixed hex and color name inputs', t => {
+	const result = chalk.gradient('#ff0000', 'blue')('AB');
+	t.true(result.startsWith('\u001B[38;2;255;0;0m'));
+	t.true(result.includes('\u001B[38;2;0;0;255m'));
+});
+
+test('gradient is chainable with other styles', t => {
+	const result = chalk.bold.gradient('#ff0000', '#0000ff')('AB');
+	t.true(result.includes('\u001B[1m'));
+	t.true(result.includes('\u001B[38;2;255;0;0m'));
+	t.true(result.includes('\u001B[22m'));
 });
