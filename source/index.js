@@ -375,3 +375,4 @@ export {
 export {hexToRgb, rgbToHex} from './utilities.js';
 
 export default chalk;
+// R1 complete
