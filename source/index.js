@@ -169,45 +169,66 @@ styles.gradient = {
 			const rgbColors = colors.map(color => colorToRgb(color));
 			const closeCode = ansiStyles.color.close;
 
-			const applyGradient = string => {
-				if (level <= 0 || !string) {
-					return parentStyler ? parentStyler.openAll + string + parentStyler.closeAll : string;
+			const applyGradientLine = line => {
+				if (line.length === 0) {
+					return '';
 				}
 
-				const lines = string.split('\n');
-				const result = lines.map(line => {
-					if (line.length === 0) {
-						return line;
+				if (level <= 1) {
+					const startColor = rgbColors[0];
+					const endColor = rgbColors.at(-1);
+					const midColor = interpolateRgb(startColor, endColor, 0.5);
+					const openCode = getRgbAnsi(level, 'color', midColor.map(value => Math.round(value)));
+					return openCode + line + closeCode;
+				}
+
+				let resultLine = '';
+				let lastColor = null;
+
+				for (let i = 0; i < line.length; i++) {
+					const position = line.length === 1 ? 0 : i / (line.length - 1);
+					const color = getGradientColor(rgbColors, position).map(value => Math.round(value));
+
+					if (!lastColor || color[0] !== lastColor[0] || color[1] !== lastColor[1] || color[2] !== lastColor[2]) {
+						resultLine += getRgbAnsi(level, 'color', color);
+						lastColor = color;
 					}
 
-					if (level <= 1) {
-						const startColor = rgbColors[0];
-						const endColor = rgbColors.at(-1);
-						const midColor = interpolateRgb(startColor, endColor, 0.5);
-						const openCode = getRgbAnsi(level, 'color', midColor.map(value => Math.round(value)));
-						return openCode + line + closeCode;
-					}
+					resultLine += line[i];
+				}
 
-					let resultLine = '';
-					let lastColor = null;
+				resultLine += closeCode;
+				return resultLine;
+			};
 
-					for (let i = 0; i < line.length; i++) {
-						const position = line.length === 1 ? 0 : i / (line.length - 1);
-						const color = getGradientColor(rgbColors, position).map(value => Math.round(value));
+			const CRLF_PLACEHOLDER = '\u0000CRLF\u0000';
 
-						if (!lastColor || color[0] !== lastColor[0] || color[1] !== lastColor[1] || color[2] !== lastColor[2]) {
-							resultLine += getRgbAnsi(level, 'color', color);
-							lastColor = color;
+			const applyGradient = string => {
+				if (level <= 0 || !string) {
+					if (parentStyler && string) {
+						const {openAll, closeAll} = parentStyler;
+						let result = openAll + string + closeAll;
+
+						const lfIndex = result.indexOf('\n');
+						if (lfIndex !== -1) {
+							result = stringEncaseCRLFWithFirstIndex(result, closeAll, openAll, lfIndex);
 						}
 
-						resultLine += line[i];
+						return result;
 					}
 
-					resultLine += closeCode;
-					return resultLine;
+					return string;
+				}
+
+				const preservedString = string.replaceAll('\r\n', CRLF_PLACEHOLDER);
+				const lines = preservedString.split('\n');
+				const styledLines = lines.map(line => {
+					const restoredLine = line.replaceAll(CRLF_PLACEHOLDER, '\r\n');
+					const crlfParts = restoredLine.split('\r\n');
+					return crlfParts.map(part => applyGradientLine(part)).join('\r\n');
 				});
 
-				let gradientResult = result.join('\n');
+				let gradientResult = styledLines.join('\n');
 
 				if (parentStyler) {
 					const {openAll, closeAll} = parentStyler;

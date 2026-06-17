@@ -250,3 +250,51 @@ test('gradient is chainable with other styles', t => {
 	t.true(result.includes('\u001B[38;2;255;0;0m'));
 	t.true(result.includes('\u001B[22m'));
 });
+
+test('gradient handles CRLF line breaks', t => {
+	const result = chalk.gradient('#ff0000', '#0000ff')('AB\r\nCD');
+	const parts = result.split('\r\n');
+	t.is(parts.length, 2);
+	t.true(parts[0].startsWith('\u001B[38;2;255;0;0m'));
+	t.true(parts[0].endsWith('\u001B[39m'));
+	t.true(parts[1].startsWith('\u001B[38;2;255;0;0m'));
+	t.true(parts[1].endsWith('\u001B[39m'));
+});
+
+test('gradient handles text with empty lines', t => {
+	const result = chalk.gradient('#ff0000', '#0000ff')('AB\n\nCD');
+	const lines = result.split('\n');
+	t.is(lines.length, 3);
+	t.true(lines[0].startsWith('\u001B[38;2;255;0;0m'));
+	t.true(lines[0].endsWith('\u001B[39m'));
+	t.is(lines[1], '');
+	t.true(lines[2].startsWith('\u001B[38;2;255;0;0m'));
+	t.true(lines[2].endsWith('\u001B[39m'));
+});
+
+test('gradient handles text starting with newline', t => {
+	const result = chalk.gradient('#ff0000', '#0000ff')('\nAB');
+	const lines = result.split('\n');
+	t.is(lines.length, 2);
+	t.is(lines[0], '');
+	t.true(lines[1].startsWith('\u001B[38;2;255;0;0m'));
+	t.true(lines[1].endsWith('\u001B[39m'));
+});
+
+test('gradient chainable with bold at level 1', t => {
+	const chalk1 = new Chalk({level: 1});
+	const result = chalk1.bold.gradient('#ff0000', '#0000ff')('AB');
+	t.true(result.startsWith('\u001B[1m'));
+	t.true(result.includes('\u001B[35m'));
+	t.true(result.endsWith('\u001B[22m'));
+});
+
+test('gradient chainable with bold at level 0', t => {
+	const chalk0 = new Chalk({level: 0});
+	const result = chalk0.bold.gradient('#ff0000', '#0000ff')('AB');
+	t.is(result, '\u001B[1mAB\u001B[22m');
+});
+
+test('gradient with bold returns empty string for empty input', t => {
+	t.is(chalk.bold.gradient('#ff0000', '#0000ff')(''), '');
+});

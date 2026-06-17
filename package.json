@@ -63,6 +63,10 @@
 		"yoctodelay": "^2.0.0"
 	},
 	"xo": {
+		"ignores": [
+			"_debug.mjs",
+			"_debug2.mjs"
+		],
 		"rules": {
 			"unicorn/prefer-string-slice": "off",
 			"@typescript-eslint/consistent-type-imports": "off",
